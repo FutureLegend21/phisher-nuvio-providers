@@ -1,7 +1,7 @@
 // Moviesdrive Scraper for Nuvio Local Scrapers
 // React Native compatible version with full original functionality
 
-const cheerio = require('cheerio');
+const cheerio = require('cheerio-without-node-native');
 
 
 // TMDB API Configuration
