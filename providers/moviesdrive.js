@@ -37,7 +37,6 @@ function extractServerName(source) {
 
     const src = source.trim();
 
-    // HubCloud servers (match Kotlin behavior)
     if (/HubCloud/i.test(src)) {
         if (/FSL/i.test(src)) return 'HubCloud FSL Server';
         if (/FSL V2/i.test(src)) return 'HubCloud FSL V2 Server';
