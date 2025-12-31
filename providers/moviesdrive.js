@@ -1,7 +1,7 @@
 // Moviesdrive Scraper for Nuvio Local Scrapers
 // React Native compatible version with full original functionality
 
-const cheerio = require('cheerio');
+const cheerio = require('cheerio-without-node-native');
 
 
 // TMDB API Configuration
@@ -1350,43 +1350,53 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
             console.log(`[Moviesdrive] Selected: "${selectedMedia.title}" (${selectedMedia.url})`);
 
             // Get download links
-            return getDownloadLinks(selectedMedia.url, season, episode).then(function (result) {
+            return getDownloadLinks(selectedMedia.url).then(function (result) {
                 const { finalLinks, isMovie } = result;
 
+                // Filter by episode if specified for TV shows
                 let filteredLinks = finalLinks;
+                if (mediaType === 'tv' && episode !== null) {
+                    filteredLinks = finalLinks.filter(function (link) {
+                        return link.episode === episode;
+                    });
+                    console.log(`[Moviesdrive] Filtered to ${filteredLinks.length} links for episode ${episode}`);
+                }
 
+                // Convert to Nuvio format, filtering out unknown quality links
                 const streams = filteredLinks
                     .filter(function (link) {
-                        return typeof link.quality === 'number' && link.quality > 0;
+                        // Skip links with unknown quality - these are usually just redirects
+                        if (typeof link.quality !== 'number' || link.quality === 0) {
+                            return false;
+                        }
+                        return true;
                     })
                     .map(function (link) {
-                        let mediaTitle;
-                        if (link.fileName && link.fileName !== 'Unknown') {
-                            mediaTitle = link.fileName;
-                        } else if (mediaType === 'tv' && season && episode) {
-                            mediaTitle =
-                                `${mediaInfo.title} ` +
-                                `S${String(season).padStart(2, '0')}` +
-                                `E${String(episode).padStart(2, '0')}`;
-                        } else if (mediaInfo.year) {
+                        // Use the actual file name from HubCloud page if available, otherwise fallback to TMDB title
+                        let mediaTitle = link.fileName && link.fileName !== 'Unknown' ? link.fileName : mediaInfo.title;
+                        if (mediaType === 'tv' && season && episode && link.episode && !link.fileName) {
+                            mediaTitle = `${mediaInfo.title} S${String(season).padStart(2, '0')}E${String(link.episode).padStart(2, '0')}`;
+                        } else if (mediaType === 'tv' && season && episode && !link.fileName) {
+                            mediaTitle = `${mediaInfo.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+                        } else if (mediaInfo.year && !link.fileName) {
                             mediaTitle = `${mediaInfo.title} (${mediaInfo.year})`;
-                        } else {
-                            mediaTitle = mediaInfo.title;
                         }
 
-                        // Size & server
+                        // Format size and extract server name
                         const formattedSize = formatBytes(link.size);
                         const serverName = extractServerName(link.source);
 
-                        // Quality normalization (APP-SAFE)
+                        // Create quality string
                         let qualityStr = 'Unknown';
-                        if (link.quality >= 2160) qualityStr = '2160p';
-                        else if (link.quality >= 1440) qualityStr = '1440p';
-                        else if (link.quality >= 1080) qualityStr = '1080p';
-                        else if (link.quality >= 720) qualityStr = '720p';
-                        else if (link.quality >= 480) qualityStr = '480p';
-                        else if (link.quality >= 360) qualityStr = '360p';
-                        else qualityStr = '240p';
+                        if (typeof link.quality === 'number') {
+                            if (link.quality >= 2160) qualityStr = '4K';
+                            else if (link.quality >= 1440) qualityStr = '1440p';
+                            else if (link.quality >= 1080) qualityStr = '1080p';
+                            else if (link.quality >= 720) qualityStr = '720p';
+                            else if (link.quality >= 480) qualityStr = '480p';
+                            else if (link.quality >= 360) qualityStr = '360p';
+                            else qualityStr = '240p';
+                        }
 
                         return {
                             name: `Moviesdrive ${serverName}`,
@@ -1399,26 +1409,15 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         };
                     });
 
-                // Sort by quality (highest first)
-                const qualityOrder = {
-                    '2160p': 5,
-                    '1440p': 4,
-                    '1080p': 3,
-                    '720p': 2,
-                    '480p': 1,
-                    '360p': 0,
-                    '240p': -1,
-                    'Unknown': -2
-                };
-
+                // Sort by quality
+                const qualityOrder = { '4K': 4, '2160p': 4, '1440p': 3, '1080p': 2, '720p': 1, '480p': 0, '360p': -1, 'Unknown': -2 };
                 streams.sort(function (a, b) {
-                    return (qualityOrder[b.quality] ?? -3) - (qualityOrder[a.quality] ?? -3);
+                    return (qualityOrder[b.quality] || -3) - (qualityOrder[a.quality] || -3);
                 });
 
                 console.log(`[Moviesdrive] Found ${streams.length} streams`);
                 return streams;
             });
-
         });
     }).catch(function (error) {
         console.error(`[Moviesdrive] Scraping error: ${error.message}`);
