@@ -8,7 +8,7 @@ A collection of local scrapers for the Nuvio streaming application. These scrape
 2. Go to Settings → Local Scrapers
 3. Add this repository URL:
    ```
-   https://raw.githubusercontent.com/tapframe/nuvio-providers/refs/heads/main/
+   https://raw.githubusercontent.com/phisher98/nuvio-providers/refs/heads/main/
    ```
 4. Enable the scrapers you want to use
 
@@ -139,7 +139,7 @@ Add your scraper to `manifest.json` (see existing entries for examples):
 
 3. **Get the raw URL:**
    ```
-   https://raw.githubusercontent.com/tapframe/nuvio-local-scrapers/main/
+   https://raw.githubusercontent.com/phisher98/nuvio-local-scrapers/main/
    ```
 
 ## Contributing
