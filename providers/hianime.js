@@ -1,6 +1,6 @@
-// HiAnime Scraper for Nuvio Local Scrapers (Hermes-safe)
+// HiAnime Scraper for Nuvio Local Scrapers
 
-const cheerio = require('cheerio');
+const cheerio = require('cheerio-without-node-native');
 
 const HIANIME_APIS = [
     "https://hianimez.is",
