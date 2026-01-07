@@ -16,10 +16,9 @@ const AJAX_HEADERS = {
     'User-Agent': 'Mozilla/5.0'
 };
 
+// ================= Megacloud Extractor =================
 
-// Extractor functions for HiAnime
-
-async function extractMegacloud(embedUrl, effectiveType) {
+function extractMegacloud(embedUrl, effectiveType) {
     const mainUrl = 'https://megacloud.blog';
 
     const headers = {
@@ -29,72 +28,70 @@ async function extractMegacloud(embedUrl, effectiveType) {
         'User-Agent': 'Mozilla/5.0'
     };
 
-    const pageRes = await fetch(embedUrl, { headers });
-    if (!pageRes.ok) return [];
+    return fetch(embedUrl, { headers })
+        .then(r => r.ok ? r.text() : null)
+        .then(page => {
+            if (!page) return [];
 
-    const page = await pageRes.text();
+            let nonce =
+                page.match(/\b[a-zA-Z0-9]{48}\b/)?.[0] ??
+                (() => {
+                    const m = page.match(
+                        /\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b/
+                    );
+                    return m ? m[1] + m[2] + m[3] : null;
+                })();
 
-    let nonce =
-        page.match(/\b[a-zA-Z0-9]{48}\b/)?.[0] ??
-        (() => {
-            const m = page.match(
-                /\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b/
-            );
-            return m ? m[1] + m[2] + m[3] : null;
-        })();
+            if (!nonce) return [];
 
-    if (!nonce) return [];
+            const id = embedUrl.split('/').pop().split('?')[0];
+            const apiUrl = `${mainUrl}/embed-2/v3/e-1/getSources?id=${id}&_k=${nonce}`;
 
-    const id = embedUrl.split('/').pop().split('?')[0];
-    const apiUrl = `${mainUrl}/embed-2/v3/e-1/getSources?id=${id}&_k=${nonce}`;
+            return fetch(apiUrl, { headers })
+                .then(r => r.ok ? r.json() : null)
+                .then(json => {
+                    if (!json?.sources?.length) return [];
 
-    const sourceRes = await fetch(apiUrl, { headers });
-    if (!sourceRes.ok) return [];
+                    const encoded = json.sources[0].file;
 
-    const json = await sourceRes.json();
-    if (!json?.sources?.length) return [];
+                    const buildResult = m3u8 => [{
+                        url: m3u8,
+                        type: effectiveType,
+                        subtitles: (json.tracks || [])
+                            .filter(t => t.kind === 'captions' || t.kind === 'subtitles')
+                            .map(t => ({ label: t.label, url: t.file }))
+                    }];
 
-    let m3u8;
+                    if (encoded.includes('.m3u8')) {
+                        return buildResult(encoded);
+                    }
 
-    const encoded = json.sources[0].file;
-    if (encoded.includes('.m3u8')) {
-        m3u8 = encoded;
-    } else {
-        const keyRes = await fetch(
-            'https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json'
-        );
-        if (!keyRes.ok) return [];
+                    return fetch(
+                        'https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json'
+                    )
+                        .then(r => r.ok ? r.json() : null)
+                        .then(keys => {
+                            const secret = keys?.mega;
+                            if (!secret) return [];
 
-        const keys = await keyRes.json();
-        const secret = keys?.mega;
-        if (!secret) return [];
+                            const decodeUrl =
+                                'https://script.google.com/macros/s/AKfycbxHbYHbrGMXYD2-bC-C43D3njIbU-wGiYQuJL61H4vyy6YVXkybMNNEPJNPPuZrD1gRVA/exec';
 
-        const decodeUrl =
-            'https://script.google.com/macros/s/AKfycbxHbYHbrGMXYD2-bC-C43D3njIbU-wGiYQuJL61H4vyy6YVXkybMNNEPJNPPuZrD1gRVA/exec';
+                            const fullUrl =
+                                `${decodeUrl}?encrypted_data=${encodeURIComponent(encoded)}` +
+                                `&nonce=${encodeURIComponent(nonce)}` +
+                                `&secret=${encodeURIComponent(secret)}`;
 
-        const fullUrl =
-            `${decodeUrl}?encrypted_data=${encodeURIComponent(encoded)}` +
-            `&nonce=${encodeURIComponent(nonce)}` +
-            `&secret=${encodeURIComponent(secret)}`;
-
-        const decodedRes = await fetch(fullUrl);
-        if (!decodedRes.ok) return [];
-
-        const decodedText = await decodedRes.text();
-        m3u8 = decodedText.match(/"file":"(.*?)"/)?.[1];
-        if (!m3u8) return [];
-    }
-
-    return [{
-        url: m3u8,
-        type: effectiveType,
-        subtitles: json.tracks
-            ?.filter(t => t.kind === 'captions' || t.kind === 'subtitles')
-            ?.map(t => ({
-                label: t.label,
-                url: t.file
-            })) ?? []
-    }];
+                            return fetch(fullUrl)
+                                .then(r => r.ok ? r.text() : null)
+                                .then(txt => {
+                                    const m3u8 = txt?.match(/"file":"(.*?)"/)?.[1];
+                                    return m3u8 ? buildResult(m3u8) : [];
+                                });
+                        });
+                });
+        })
+        .catch(() => []);
 }
 
 // ================= TMDB CONFIG =================
@@ -104,95 +101,73 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 // ================= HELPERS =================
 
-
-async function fetchJsonWithTimeout(url, headers, timeoutMs = 10_000) {
+function fetchJsonWithTimeout(url, headers, timeoutMs = 10000) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-        const res = await fetch(url, { headers, signal: controller.signal });
-        if (!res.ok) return null;
-        return await res.json();
-    } finally {
-        clearTimeout(t);
-    }
+    return fetch(url, { headers, signal: controller.signal })
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
+        .finally(() => clearTimeout(t));
 }
 
-
-async function tmdbFetch(path) {
+function tmdbFetch(path) {
     const url = `${TMDB_BASE_URL}${path}?api_key=${TMDB_API_KEY}`;
-    const res = await fetch(url, {
+    return fetch(url, {
         headers: {
             'Accept': 'application/json',
             'User-Agent': 'Mozilla/5.0'
         }
+    }).then(r => {
+        if (!r.ok) throw new Error(`TMDB ${r.status}`);
+        return r.json();
     });
-    if (!res.ok) throw new Error(`TMDB ${res.status}`);
-    return res.json();
 }
 
-async function getTMDBDetails(tmdbId, mediaType) {
+function getTMDBDetails(tmdbId, mediaType) {
     if (mediaType === 'movie') {
-        const data = await tmdbFetch(`/movie/${tmdbId}`);
-        return {
-            title: data.title,
-            releaseDate: data.release_date ?? null,
+        return tmdbFetch(`/movie/${tmdbId}`).then(d => ({
+            title: d.title,
+            releaseDate: d.release_date ?? null,
             firstAirDate: null,
-            year: data.release_date
-                ? Number(data.release_date.split('-')[0])
-                : null
-        };
+            year: d.release_date ? Number(d.release_date.split('-')[0]) : null
+        }));
     }
 
-    const data = await tmdbFetch(`/tv/${tmdbId}`);
-    return {
-        title: data.name,
-        releaseDate: data.first_air_date ?? null, // S1 date
-        firstAirDate: data.first_air_date ?? null,
-        year: data.first_air_date
-            ? Number(data.first_air_date.split('-')[0])
-            : null
-    };
+    return tmdbFetch(`/tv/${tmdbId}`).then(d => ({
+        title: d.name,
+        releaseDate: d.first_air_date ?? null,
+        firstAirDate: d.first_air_date ?? null,
+        year: d.first_air_date ? Number(d.first_air_date.split('-')[0]) : null
+    }));
 }
 
-// 🔥 THIS WAS MISSING
-async function getTMDBSeasonAirDate(tmdbId, seasonNumber) {
-    const data = await tmdbFetch(`/tv/${tmdbId}/season/${seasonNumber}`);
-    return data.air_date ?? null;
+function getTMDBSeasonAirDate(tmdbId, seasonNumber) {
+    return tmdbFetch(`/tv/${tmdbId}/season/${seasonNumber}`)
+        .then(d => d.air_date ?? null)
+        .catch(() => null);
 }
 
 // ================= ANILIST / MAL =================
 
 const ANILIST_API = 'https://graphql.anilist.co';
 
-async function getHiAnimeIdFromMalSync(malId) {
-    try {
-        const res = await fetch(`https://api.malsync.moe/mal/anime/${malId}`);
-        if (!res.ok) return null;
-
-        const json = await res.json();
-        const zoro = json?.Sites?.Zoro;
-        if (!zoro) return null;
-        const entry = Object.values(zoro)[0];
-        return entry?.identifier ?? null;
-    } catch {
-        return null;
-    }
-}
-
-
-function getSeason(month) {
-    if (!month) return null;
-    if (month <= 3) return 'WINTER';
-    if (month <= 6) return 'SPRING';
-    if (month <= 9) return 'SUMMER';
-    return 'FALL';
+function getHiAnimeIdFromMalSync(malId) {
+    return fetch(`https://api.malsync.moe/mal/anime/${malId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+            const zoro = json?.Sites?.Zoro;
+            if (!zoro) return null;
+            const entry = Object.values(zoro)[0];
+            return entry?.identifier ?? null;
+        })
+        .catch(() => null);
 }
 
 // ================= ANILIST LOOKUP =================
 
-async function tmdbToAnimeId(title, year, type) {
-    if (!title || !year) return { id: null, idMal: null };
+function tmdbToAnimeId(title, year) {
+    if (!title || !year) return Promise.resolve({ id: null, idMal: null });
 
     const query = `
         query ($search: String, $seasonYear: Int) {
@@ -210,182 +185,156 @@ async function tmdbToAnimeId(title, year, type) {
         }
     `;
 
-    const res = await fetch(ANILIST_API, {
+    return fetch(ANILIST_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             query,
             variables: { search: title, seasonYear: year }
         })
-    });
-
-    if (!res.ok) return { id: null, idMal: null };
-    const json = await res.json();
-    const media = json?.data?.Page?.media?.[0];
-    return { id: media?.id ?? null, idMal: media?.idMal ?? null };
+    })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => {
+            const m = j?.data?.Page?.media?.[0];
+            return { id: m?.id ?? null, idMal: m?.idMal ?? null };
+        })
+        .catch(() => ({ id: null, idMal: null }));
 }
 
-async function convertTmdbToAnimeId(title, date, airedDate, type) {
+function convertTmdbToAnimeId(title, date, airedDate) {
     const primaryYear = date ? Number(date.split('-')[0]) : null;
     const airedYear = airedDate ? Number(airedDate.split('-')[0]) : null;
 
-    const ids = await tmdbToAnimeId(title, primaryYear, type);
-
-    if (!ids.id && airedYear && airedYear !== primaryYear) {
-        return tmdbToAnimeId(title, airedYear, type);
-    }
-    return ids;
+    return tmdbToAnimeId(title, primaryYear).then(ids => {
+        if (!ids.id && airedYear && airedYear !== primaryYear) {
+            return tmdbToAnimeId(title, airedYear);
+        }
+        return ids;
+    });
 }
 
 // ================= Main Logic =================
 
 function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) {
-    return getTMDBDetails(tmdbId, mediaType).then(async mediaInfo => {
+    return getTMDBDetails(tmdbId, mediaType)
+        .then(mediaInfo => {
+            const seasonPromise =
+                mediaType === 'tv' && season && season > 1
+                    ? getTMDBSeasonAirDate(tmdbId, season)
+                    : Promise.resolve(mediaInfo.firstAirDate);
 
-        let airedDate = mediaInfo.firstAirDate;
+            return seasonPromise.then(airedDate => ({ mediaInfo, airedDate }));
+        })
+        .then(({ mediaInfo, airedDate }) => {
+            const title =
+                mediaType === 'tv' && season
+                    ? `${mediaInfo.title} Season ${season}`
+                    : mediaInfo.title;
 
-        // fetch correct season air date (S2+)
-        if (mediaType === 'tv' && season && season > 1) {
-            airedDate = await getTMDBSeasonAirDate(tmdbId, season);
-        }
+            return convertTmdbToAnimeId(
+                title,
+                mediaType === 'tv' ? airedDate : mediaInfo.releaseDate,
+                airedDate
+            ).then(ids => ({ mediaInfo, airedDate, ids }));
+        })
+        .then(({ mediaInfo, airedDate, ids }) => {
+            if (!ids.idMal) return [];
 
-        const aniSearchTitle =
-            mediaType === 'tv' && season
-                ? `${mediaInfo.title} Season ${season}`
-                : mediaInfo.title;
+            return getHiAnimeIdFromMalSync(ids.idMal).then(hiAnimeId => {
+                if (!hiAnimeId) return [];
 
-        const { idMal } = await convertTmdbToAnimeId(
-            aniSearchTitle,
-            mediaType === 'tv' ? airedDate : mediaInfo.releaseDate,
-            airedDate,
-            season == null ? 'AnimeMovie' : 'Anime'
-        );
+                const episodeNumber = String(episode ?? 1);
+                const apis = [...HIANIME_APIS].sort(() => Math.random() - 0.5);
 
-        const hiAnimeId = idMal
-            ? await getHiAnimeIdFromMalSync(idMal)
-            : null;
+                let chain = Promise.resolve([]);
 
-        console.log('[HiAnime] ID:', hiAnimeId);
+                apis.forEach(api => {
+                    chain = chain.then(result => {
+                        if (result.length) return result;
 
-        if (!hiAnimeId) return [];
-
-        const episodeNumber = String(episode ?? 1);
-        const shuffledApis = [...HIANIME_APIS].sort(() => Math.random() - 0.5);
-
-        for (const api of shuffledApis) {
-            try {
-
-                /* ======== episode list ======== */
-
-                const listRes = await fetchJsonWithTimeout(
-                    `${api}/ajax/v2/episode/list/${hiAnimeId}`,
-                    AJAX_HEADERS
-                );
-
-                if (!listRes?.html) continue;
-
-                const $list = cheerio.load(listRes.html);
-
-                const episodeId = $list('div.ss-list a')
-                    .filter((_, el) => $list(el).attr('data-number') === episodeNumber)
-                    .first()
-                    .attr('data-id');
-
-                console.log('[HiAnime] Fetched episode list from', episodeId);
-
-
-                if (!episodeId) continue;
-
-                /* ======== servers ======== */
-
-                const serversRes = await fetchJsonWithTimeout(
-                    `${api}/ajax/v2/episode/servers?episodeId=${episodeId}`,
-                    AJAX_HEADERS
-                );
-
-                if (!serversRes?.html) continue;
-
-                const $servers = cheerio.load(serversRes.html);
-
-                const servers = $servers('div.item.server-item')
-                    .map((_, el) => {
-                        const type = $servers(el).attr('data-type');
-                        return {
-                            label: $servers(el).text().trim(),
-                            serverId: $servers(el).attr('data-id'),
-                            effectiveType: type === 'raw' ? 'SUB' : type.toUpperCase()
-                        };
-                    })
-                    .get();
-
-                console.log('[HiAnime] Found', servers.length, 'servers');
-
-
-                /* ======== sources ======== */
-
-                const streams = [];
-
-                for (const server of servers) {
-                    if (!server.serverId) continue;
-
-                    const effectiveType = server.effectiveType;
-
-                    try {
-                        const sourceRes = await fetchJsonWithTimeout(
-                            `${api}/ajax/v2/episode/sources?id=${server.serverId}`,
+                        return fetchJsonWithTimeout(
+                            `${api}/ajax/v2/episode/list/${hiAnimeId}`,
                             AJAX_HEADERS
-                        );
+                        )
+                            .then(listRes => {
+                                if (!listRes?.html) return [];
 
-                        const embedUrl = sourceRes?.link;
-                        if (!embedUrl) continue;
+                                const $ = cheerio.load(listRes.html);
+                                const episodeId = $('div.ss-list a')
+                                    .filter((_, el) => $(el).attr('data-number') === episodeNumber)
+                                    .first()
+                                    .attr('data-id');
 
-                        console.log(`[HiAnime] Embed found: ${server.label} (${effectiveType})`);
+                                if (!episodeId) return [];
 
-                        if (embedUrl.includes('megacloud')) {
-                            const extracted = await extractMegacloud(embedUrl, effectiveType);
+                                return fetchJsonWithTimeout(
+                                    `${api}/ajax/v2/episode/servers?episodeId=${episodeId}`,
+                                    AJAX_HEADERS
+                                ).then(serversRes => {
+                                    if (!serversRes?.html) return [];
 
-                            for (const stream of extracted) {
-                                streams.push({
-                                    name: `⌜ HiAnime ⌟ | ${server.label.toUpperCase()} | ${stream.type}`,
-                                    title:
-                                        mediaType === 'tv'
-                                            ? `${mediaInfo.title} S${String(season).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`
-                                            : mediaInfo.title,
-                                    url: stream.url,
-                                    quality: '1080p',
-                                    provider: 'HiAnime',
-                                    malId: idMal,
-                                    type: stream.type,
-                                    subtitles: stream.subtitles
+                                    const $$ = cheerio.load(serversRes.html);
+                                    const servers = $$('div.item.server-item').map((_, el) => ({
+                                        label: $$(el).text().trim(),
+                                        serverId: $$(el).attr('data-id'),
+                                        effectiveType:
+                                            $$(el).attr('data-type') === 'raw'
+                                                ? 'SUB'
+                                                : $$(el).attr('data-type')?.toUpperCase()
+                                    })).get();
+
+                                    let streams = [];
+                                    let serverChain = Promise.resolve();
+
+                                    servers.forEach(server => {
+                                        serverChain = serverChain.then(() => {
+                                            if (!server.serverId) return;
+
+                                            return fetchJsonWithTimeout(
+                                                `${api}/ajax/v2/episode/sources?id=${server.serverId}`,
+                                                AJAX_HEADERS
+                                            ).then(src => {
+                                                const embedUrl = src?.link;
+                                                if (!embedUrl || !embedUrl.includes('megacloud')) return;
+
+                                                return extractMegacloud(embedUrl, server.effectiveType)
+                                                    .then(extracted => {
+                                                        extracted.forEach(s => {
+                                                            streams.push({
+                                                                name: `⌜ HiAnime ⌟ | ${server.label.toUpperCase()} | ${s.type}`,
+                                                                title:
+                                                                    mediaType === 'tv'
+                                                                        ? `${mediaInfo.title} S${String(season).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`
+                                                                        : mediaInfo.title,
+                                                                url: s.url,
+                                                                quality: '1080p',
+                                                                provider: 'HiAnime',
+                                                                malId: ids.idMal,
+                                                                type: s.type,
+                                                                subtitles: s.subtitles
+                                                            });
+                                                        });
+                                                    });
+                                            });
+                                        });
+                                    });
+
+                                    return serverChain.then(() => streams);
                                 });
-                            }
-                        }
-                    } catch {
-                        console.debug('[HiAnime] Server failed:', server.label);
-                    }
-                }
+                            });
+                    });
+                });
 
-
-
-                if (streams.length > 0) {
-                    return streams; // success
-                }
-            } catch (e) {
-                console.warn(`[HiAnime] Failed on ${api}: ${e.message}`);
-            }
-        }
-
-        return [];
-    }).catch(() => []);
+                return chain;
+            });
+        })
+        .catch(() => []);
 }
-
 
 // ================= EXPORT =================
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { getStreams };
 } else {
-    // For React Native environment
     global.getStreams = { getStreams };
 }
-// 
