@@ -498,7 +498,18 @@ function hubCloudExtractor(url, referer) {
                         }
                     });
                 }
+                const host = new URL(link).hostname;
+
+                if (
+                    host.includes('hubcloud') ||
+                    host.includes('hubdrive') ||
+                    host.includes('hubcdn')
+                ) {
+                    return Promise.resolve();
+                }
+
                 return loadExtractor(link, finalUrl).then(r => links.push(...r));
+
             });
             return Promise.all(processElements).then(() => links);
         })
@@ -564,7 +575,7 @@ function loadExtractor(url, referer = MAIN_URL) {
         hostname.includes('doubleclick.') ||
         hostname.includes('ddl2')
     ) {
-        console.warn('[Moviesdrive] Blocked redirect host:', hostname);
+        console.warn('[XDMovies] Blocked redirect host:', hostname);
         return Promise.resolve([]);
     }
 
@@ -719,7 +730,11 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                 )
                             ).then(results =>
                                 results.flat()
-                                    .filter(link => link && link.url)
+                                    .filter(link =>
+                                        link &&
+                                        link.url &&
+                                        !/hubcloud|hubdrive|hubcdn/i.test(link.url)
+                                    )
                                     .map(link => {
                                         let mediaTitle;
                                         if (link.fileName && link.fileName !== 'Unknown') {
@@ -752,12 +767,11 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                             url: link.url,
                                             quality: qualityStr,
                                             size: formatBytes(link.size),
-                                            headers: XDMOVIES_HEADERS,
-                                            provider: 'XDmovies',
-                                            source: link.source
+                                            provider: 'XDmovies'
                                         };
                                     })
-                            );
+                            )
+
 
 
                         });
