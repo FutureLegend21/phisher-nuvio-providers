@@ -21,6 +21,17 @@ const HEADERS = {
 };
 
 
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return 'Unknown';
+
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+
 /**
  * Cleans title by extracting quality and codec information.
  * Replicates the `cleanTitle` function from Utils.kt.
@@ -694,7 +705,7 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                             if (!extractedUrls || !extractedUrls.length) return [];
 
                             // ================= FINAL EXTRACTION =================
-                            
+
                             return Promise.all(
                                 extractedUrls.map(serverUrl =>
                                     loadExtractor(serverUrl, XDMOVIES_API)
@@ -707,24 +718,47 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                         })
                                 )
                             ).then(results =>
-                                results.flat().map(link => {
-                                    const serverName = extractServerName(link.source);
+                                results.flat()
+                                    .filter(link => link && link.url)
+                                    .map(link => {
+                                        let mediaTitle;
+                                        if (link.fileName && link.fileName !== 'Unknown') {
+                                            mediaTitle = link.fileName;
+                                        } else if (mediaType === 'tv' && season && episode) {
+                                            mediaTitle =
+                                                `${mediaInfo.title} ` +
+                                                `S${String(season).padStart(2, '0')}` +
+                                                `E${String(episode).padStart(2, '0')}`;
+                                        } else if (mediaInfo.year) {
+                                            mediaTitle = `${mediaInfo.title} (${mediaInfo.year})`;
+                                        } else {
+                                            mediaTitle = mediaInfo.title;
+                                        }
 
-                                    return {
-                                        name: `XDmovies ${serverName}`,
-                                        title:
-                                            mediaType === 'tv'
-                                                ? `${mediaInfo.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
-                                                : mediaInfo.title,
-                                        url: link.url,
-                                        quality: link.quality || 'Unknown',
-                                        size: link.size || 0,
-                                        provider: 'XDmovies',
-                                        source: serverName,
-                                        headers: XDMOVIES_HEADERS
-                                    };
-                                })
+                                        const serverName = extractServerName(link.source);
+
+                                        let qualityStr = 'Unknown';
+                                        if (link.quality >= 2160) qualityStr = '2160p';
+                                        else if (link.quality >= 1440) qualityStr = '1440p';
+                                        else if (link.quality >= 1080) qualityStr = '1080p';
+                                        else if (link.quality >= 720) qualityStr = '720p';
+                                        else if (link.quality >= 480) qualityStr = '480p';
+                                        else if (link.quality >= 360) qualityStr = '360p';
+                                        else qualityStr = '240p';
+
+                                        return {
+                                            name: `XDmovies ${serverName}`,
+                                            title: mediaTitle,
+                                            url: link.url,
+                                            quality: qualityStr,
+                                            size: formatBytes(link.size),
+                                            headers: XDMOVIES_HEADERS,
+                                            provider: 'XDmovies',
+                                            source: link.source
+                                        };
+                                    })
                             );
+
 
                         });
                 });
