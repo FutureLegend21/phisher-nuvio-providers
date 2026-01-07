@@ -1,5 +1,5 @@
 // ================= XDmovies =================
-const cheerio = require('cheerio');
+const cheerio = require('cheerio-without-node-native');
 
 //-without-node-native
 const XDMOVIES_API = "https://xdmovies.site";
