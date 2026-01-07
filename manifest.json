@@ -43,6 +43,27 @@
       "contentLanguage": [
         "en"
       ]
+    },
+    {
+      "id": "XDMovies",
+      "name": "XDMovies",
+      "description": "XDMovies Multi-Lang Movies/TVSeries Streaming",
+      "version": "1.0.0",
+      "author": "Phisher",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/xdmovies.js",
+      "enabled": true,
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "logo": "https://xdmovies.site/assets/logo1.png",
+      "contentLanguage": [
+        "hi"
+      ]
     }
   ]
 }
