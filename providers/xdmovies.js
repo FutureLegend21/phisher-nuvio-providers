@@ -1,7 +1,7 @@
 // ================= XDmovies =================
-const cheerio = require('cheerio-without-node-native');
+const cheerio = require('cheerio');
 
-//
+//-without-node-native
 const XDMOVIES_API = "https://xdmovies.site";
 
 // TMDB API Configuration
@@ -110,7 +110,7 @@ function extractServerName(source) {
  * Extract direct download link from Pixeldrain.
  * Pixeldrain direct link format: https://pixeldrain.com/api/file/{id}?download
  */
-function pixelDrainExtractor(link) {
+function pixelDrainExtractor(link,quality) {
     return Promise.resolve().then(() => {
         let fileId;
         // link can be pixeldrain.com/u/{id} or pixeldrain.dev/... or pixeldrain.xyz/...
@@ -144,7 +144,7 @@ function pixelDrainExtractor(link) {
                 const directUrl = `https://pixeldrain.com/api/file/${fileId}?download`;
                 return [{
                     source: 'Pixeldrain',
-                    quality: fileInfo.quality,
+                    quality: quality ? quality : fileInfo.quality,
                     url: directUrl,
                     name: fileInfo.name,
                     size: fileInfo.size,
@@ -452,7 +452,7 @@ function hubCloudExtractor(url, referer) {
                 }
 
                 if (link.includes("pixeldra")) {
-                    return pixelDrainExtractor(link)
+                    return pixelDrainExtractor(link,quality)
                         .then(extracted => {
                             links.push(...extracted.map(l => ({
                                 ...l,
@@ -653,10 +653,10 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                         .then(r => r.text())
                         .then(html => {
                             const $ = cheerio.load(html);
-                            const extractedUrls = [];
+                            const collectedUrls = [];
 
-                            const resolveRedirect = (url) => {
-                                return fetch(url, {
+                            const resolveRedirect = (url) =>
+                                fetch(url, {
                                     headers: XDMOVIES_HEADERS,
                                     redirect: 'manual'
                                 })
@@ -668,9 +668,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                         return url;
                                     })
                                     .catch(() => null);
-                            };
 
-                            // ================= MOVIE =================
+                            // ===== MOVIE =====
                             if (!season) {
                                 const rawLinks = $('div.download-item a[href]')
                                     .map((_, a) => $(a).attr('href'))
@@ -679,13 +678,13 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                 return Promise.all(
                                     rawLinks.map(raw =>
                                         resolveRedirect(raw).then(finalUrl => {
-                                            if (finalUrl) extractedUrls.push(finalUrl);
+                                            if (finalUrl) collectedUrls.push(finalUrl);
                                         })
                                     )
-                                ).then(() => extractedUrls);
+                                ).then(() => collectedUrls);
                             }
 
-                            // ================= TV =================
+                            // ===== TV =====
                             const epRegex = new RegExp(
                                 `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`,
                                 'i'
@@ -704,76 +703,66 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
 
                                     jobs.push(
                                         resolveRedirect(raw).then(finalUrl => {
-                                            if (finalUrl) extractedUrls.push(finalUrl);
+                                            if (finalUrl) collectedUrls.push(finalUrl);
                                         })
                                     );
                                 });
                             });
 
-                            return Promise.all(jobs).then(() => extractedUrls);
+                            return Promise.all(jobs).then(() => collectedUrls);
                         })
-                        .then(extractedUrls => {
-                            if (!extractedUrls || !extractedUrls.length) return [];
+                        .then(collectedUrls => {
+                            if (!collectedUrls.length) return [];
 
-                            // ================= FINAL EXTRACTION =================
-
+                            // ---------- EXTRACTION ----------
                             return Promise.all(
-                                extractedUrls.map(serverUrl =>
-                                    loadExtractor(serverUrl, XDMOVIES_API)
-                                        .catch(err => {
-                                            console.error(
-                                                `[XDmovies] Failed extractor ${serverUrl}:`,
-                                                err.message
-                                            );
-                                            return [];
-                                        })
+                                collectedUrls.map(url =>
+                                    loadExtractor(url, XDMOVIES_API)
+                                        .catch(() => [])
                                 )
-                            ).then(results =>
-                                results.flat()
-                                    .filter(link =>
-                                        link &&
-                                        link.url &&
-                                        !/hubcloud|hubdrive|hubcdn/i.test(link.url)
-                                    )
-                                    .map(link => {
-                                        let mediaTitle;
-                                        if (link.fileName && link.fileName !== 'Unknown') {
-                                            mediaTitle = link.fileName;
-                                        } else if (mediaType === 'tv' && season && episode) {
-                                            mediaTitle =
-                                                `${mediaInfo.title} ` +
-                                                `S${String(season).padStart(2, '0')}` +
-                                                `E${String(episode).padStart(2, '0')}`;
-                                        } else if (mediaInfo.year) {
-                                            mediaTitle = `${mediaInfo.title} (${mediaInfo.year})`;
-                                        } else {
-                                            mediaTitle = mediaInfo.title;
-                                        }
+                            ).then(results => {
+                                const flat = results.flat();
 
-                                        const serverName = extractServerName(link.source);
+                                // Deduplicate FINAL streams only
+                                const seen = new Set();
 
-                                        let qualityStr = 'Unknown';
-                                        if (link.quality >= 2160) qualityStr = '2160p';
-                                        else if (link.quality >= 1440) qualityStr = '1440p';
-                                        else if (link.quality >= 1080) qualityStr = '1080p';
-                                        else if (link.quality >= 720) qualityStr = '720p';
-                                        else if (link.quality >= 480) qualityStr = '480p';
-                                        else if (link.quality >= 360) qualityStr = '360p';
-                                        else qualityStr = '240p';
+                                return flat.filter(link => {
+                                    if (!link || !link.url) return false;
+                                    if (seen.has(link.url)) return false;
+                                    seen.add(link.url);
+                                    return true;
+                                }).map(link => {
+                                    let title;
+                                    if (mediaType === 'tv') {
+                                        title =
+                                            `${mediaInfo.title} ` +
+                                            `S${String(season).padStart(2, '0')}` +
+                                            `E${String(episode).padStart(2, '0')}`;
+                                    } else if (mediaInfo.year) {
+                                        title = `${mediaInfo.title} (${mediaInfo.year})`;
+                                    } else {
+                                        title = mediaInfo.title;
+                                    }
 
-                                        return {
-                                            name: `XDmovies ${serverName}`,
-                                            title: mediaTitle,
-                                            url: link.url,
-                                            quality: qualityStr,
-                                            size: formatBytes(link.size),
-                                            provider: 'XDmovies'
-                                        };
-                                    })
-                            )
+                                    let quality = 'Unknown';
+                                    if (link.quality >= 2160) quality = '2160p';
+                                    else if (link.quality >= 1440) quality = '1440p';
+                                    else if (link.quality >= 1080) quality = '1080p';
+                                    else if (link.quality >= 720) quality = '720p';
+                                    else if (link.quality >= 480) quality = '480p';
+                                    else if (link.quality >= 360) quality = '360p';
 
-
-
+                                    return {
+                                        name: `XDmovies ${extractServerName(link.source)}`,
+                                        title,
+                                        url: link.url,
+                                        quality,
+                                        size: formatBytes(link.size),
+                                        headers: link.headers,
+                                        provider: 'XDmovies'
+                                    };
+                                });
+                            });
                         });
                 });
         })
@@ -782,7 +771,6 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
             return [];
         });
 }
-
 
 
 // ================= EXPORT =================
