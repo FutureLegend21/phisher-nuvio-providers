@@ -625,22 +625,16 @@ function extractCodec(text) {
     return m ? m[0].toUpperCase() : '';
 }
 
-const resolveRedirect = async (url) => {
-    if (!url) return null;
+function resolveRedirect(url) {
+    if (!url) return Promise.resolve(null);
 
-    try {
-        const res = await fetch(url, {
-            headers: XDMOVIES_HEADERS,
-            redirect: 'follow'
-        });
-
-        // FINAL redirected URL
-        return res.url || url;
-    } catch {
-        return null;
-    }
-};
-
+    return fetch(url, {
+        headers: XDMOVIES_HEADERS,
+        redirect: 'follow'
+    })
+        .then(res => res.url || url)
+        .catch(() => null);
+}
 
 // ================= MAIN =================
 
@@ -704,12 +698,16 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
 
                             // ---------- EXTRACTION ----------
                             return Promise.all(
-                                collectedUrls.map(async rawUrl => {
-                                    const finalUrl = await resolveRedirect(rawUrl);
-                                    if (!finalUrl) return [];
-                                    return loadExtractor(finalUrl, XDMOVIES_API).catch(() => []);
+                                collectedUrls.map(function (rawUrl) {
+                                    return resolveRedirect(rawUrl)
+                                        .then(function (finalUrl) {
+                                            if (!finalUrl) return [];
+                                            return loadExtractor(finalUrl, XDMOVIES_API)
+                                                .catch(function () { return []; });
+                                        });
                                 })
                             );
+
 
                         })
                         .then(results => {
