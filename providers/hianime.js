@@ -227,7 +227,7 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                                         return extractMegacloud(src.link, s.type)
                                                             .then(xs => xs.forEach(x =>
                                                                 out.push({
-                                                                    name: `⌜ HiAnime ⌟ | ${s.label}`,
+                                                                    name: `⌜ HiAnime ⌟ | ${s.label} | ${s.type}`,
                                                                     title: info.title,
                                                                     url: x.url,
                                                                     quality: '1080p',
