@@ -12,7 +12,7 @@
         "movie",
         "tv"
       ],
-      "filename": "providers/moviesdrive.js",
+      "filename": "src/providers/moviesdrive.js",
       "enabled": true,
       "formats": [
         "mp4",
@@ -33,7 +33,7 @@
         "movie",
         "tv"
       ],
-      "filename": "providers/hianime.js",
+      "filename": "src/providers/hianime.js",
       "enabled": true,
       "formats": [
         "mp4",
@@ -48,13 +48,13 @@
       "id": "XDMovies",
       "name": "XDMovies",
       "description": "XDMovies Multi-Lang Movies/TVSeries Streaming",
-      "version": "1.0.12",
+      "version": "1.0.13",
       "author": "Phisher",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/xdmovies.js",
+      "filename": "src/providers/xdmovies.js",
       "enabled": true,
       "formats": [
         "mp4",

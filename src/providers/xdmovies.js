@@ -1,6 +1,5 @@
 // ================= XDmovies =================
-const cheerio = require('cheerio-without-node-native');
-
+const cheerio = require('cheerio');
 
 const XDMOVIES_API = "https://xdmovies.site";
 
@@ -110,7 +109,7 @@ function extractServerName(source) {
  * Extract direct download link from Pixeldrain.
  * Pixeldrain direct link format: https://pixeldrain.com/api/file/{id}?download
  */
-function pixelDrainExtractor(link, quality) {
+function pixelDrainExtractor(link,quality) {
     return Promise.resolve().then(() => {
         let fileId;
         // link can be pixeldrain.com/u/{id} or pixeldrain.dev/... or pixeldrain.xyz/...
@@ -142,6 +141,7 @@ function pixelDrainExtractor(link, quality) {
                     }
                 }
                 const directUrl = `https://pixeldrain.com/api/file/${fileId}?download`;
+
                 return [{
                     source: 'Pixeldrain',
                     quality: quality ? quality : fileInfo.quality,
@@ -279,7 +279,6 @@ function hubDriveExtractor(url, referer) {
 
 function hubCloudExtractor(url, referer) {
     let currentUrl = url;
-    console.log('[HubCloud] Extracting from URL:', currentUrl);
 
     // Replicate domain change logic from HubCloud extractor
     if (currentUrl.includes("hubcloud.ink")) {
@@ -379,7 +378,7 @@ function hubCloudExtractor(url, referer) {
                     return Promise.resolve();
                 }
 
-                console.log(`[HubCloud] Found ${text} link ${link}`);
+                //console.log(`[HubCloud] Found ${text} link ${link}`);
 
                 const fileName = header || headerDetails || 'Unknown';
 
@@ -452,7 +451,8 @@ function hubCloudExtractor(url, referer) {
                 }
 
                 if (link.includes("pixeldra")) {
-                    return pixelDrainExtractor(link, quality)
+                    console.log('[HubCloud] Using Pixeldrain extractor for link:', link);
+                    return pixelDrainExtractor(link,quality)
                         .then(extracted => {
                             links.push(...extracted.map(l => ({
                                 ...l,
@@ -625,31 +625,6 @@ function extractCodec(text) {
     return m ? m[0].toUpperCase() : '';
 }
 
-function xdMoviesLinkExtractor(url, referer) {
-    return fetch(url, {
-        headers: {
-            ...XDMOVIES_HEADERS,
-            Referer: referer
-        }
-    })
-        .then(r => r.text())
-        .then(html => {
-            const $ = cheerio.load(html);
-
-            // Common patterns used by xdmovies shortener
-            let out =
-                $('a[href^="http"]').attr('href') ||
-                $('meta[http-equiv="refresh"]').attr('content')?.split('url=')[1];
-
-            if (!out) return [];
-
-            // Normalize & pass to loadExtractor
-            return loadExtractor(out, url);
-        })
-        .catch(() => []);
-}
-
-
 // ================= MAIN =================
 
 function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) {
@@ -680,13 +655,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                             const $ = cheerio.load(html);
                             const collectedUrls = [];
 
-                            const resolveRedirect = (url) => {
-                                // ✅ Only redirect for xdmovies link shortener
-                                if (!url || !url.startsWith('https://link.xdmovies.site/')) {
-                                    return Promise.resolve(url);
-                                }
-
-                                return fetch(url, {
+                            const resolveRedirect = (url) =>
+                                fetch(url, {
                                     headers: XDMOVIES_HEADERS,
                                     redirect: 'manual'
                                 })
@@ -698,8 +668,6 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                         return url;
                                     })
                                     .catch(() => null);
-                            };
-
 
                             // ===== MOVIE =====
                             if (!season) {
@@ -710,7 +678,6 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
                                 return Promise.all(
                                     rawLinks.map(raw =>
                                         resolveRedirect(raw).then(finalUrl => {
-                                            console.log('[XDmovies] Resolved URL:', finalUrl);
                                             if (finalUrl) collectedUrls.push(finalUrl);
                                         })
                                     )
@@ -736,7 +703,6 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
 
                                     jobs.push(
                                         resolveRedirect(raw).then(finalUrl => {
-                                            console.log('[XDmovies] Resolved URL:', finalUrl);
                                             if (finalUrl) collectedUrls.push(finalUrl);
                                         })
                                     );
