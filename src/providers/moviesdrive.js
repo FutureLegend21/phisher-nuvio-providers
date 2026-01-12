@@ -893,40 +893,39 @@ function loadExtractor(url, referer = MAIN_URL) {
  * @param {string} query The search term.
  * @returns {Promise<Array<{title: string, url: string, poster: string}>>} A list of search results.
  */
-function search(query) {
+function search(imdbId, page = 1) {
     return getCurrentDomain()
         .then(currentDomain => {
-            const searchUrl = `${currentDomain}/?s=${encodeURIComponent(query)}`;
-            return fetch(searchUrl, { headers: HEADERS });
+            const apiUrl = `${currentDomain}/searchapi.php?q=${encodeURIComponent(imdbId)}&page=${page}`;
+            console.log(`[Moviesdrive] Searching API: ${apiUrl}`);
+            return fetch(apiUrl, { headers: HEADERS });
         })
-        .then(res => res.text())
-        .then(html => {
-            const $ = cheerio.load(html);
+        .then(res => res.json())
+        .then(json => {
+            if (!json?.hits?.length) {
+                console.log('[Moviesdrive] No results');
+                return [];
+            }
 
-            const results = $('#moviesGridMain > a')
-                .map((_, el) => {
-                    const card = $(el);
-
-                    const title = card.find('.poster-title').text().trim();
-                    if (!title) return null;
-
-                    const yearMatch = title.match(/\b(19|20)\d{2}\b/);
-                    const year = yearMatch ? Number(yearMatch[0]) : null;
-
-                    return {
-                        title,
-                        url: card.attr('href'),
-                        poster: card.find('img').attr('src') ?? null,
-                        year
-                    };
-                })
-                .get()
-                .filter(Boolean);
+            const results = json.hits
+                .map(hit => hit.document)
+                .filter(doc => doc.imdb_id === imdbId)
+                .map(doc => ({
+                    title: doc.post_title,
+                    url: doc.permalink.startsWith('http')? doc.permalink: `${MAIN_URL}${doc.permalink.startsWith('/') ? '' : '/'}${doc.permalink}`,
+                    poster: doc.post_thumbnail ?? null,
+                    year: (() => {
+                        const match = doc.post_title.match(/\b(19|20)\d{2}\b/);
+                        return match ? Number(match[0]) : null;
+                    })(),
+                    imdbId: doc.imdb_id
+                }));
 
             console.log(`[Moviesdrive] Search results: ${results.length}`);
             return results;
         });
 }
+
 
 
 /**
@@ -945,7 +944,7 @@ function getDownloadLinks(mediaUrl, season, episode) {
         .then(data => {
             const $ = cheerio.load(data);
 
-            const typeRaw = $('.poster-title').text();
+            const typeRaw = $('h1.post-title').text();
             const isMovie = typeRaw.toLowerCase().includes('movie');
 
             const title = $('.poster-title').first().text().trim();
@@ -1027,8 +1026,6 @@ function getDownloadLinks(mediaUrl, season, episode) {
                         isMovie: true
                     };
                 });
-
-
             } else {
                 // =========================
                 // TV SERIES FLOW
@@ -1311,7 +1308,8 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
         console.log(`[Moviesdrive] TMDB Info: "${mediaInfo.title}" (${mediaInfo.year || 'N/A'})`);
 
         // Search for the content
-        const searchQuery = mediaType === 'tv' && season ? `${mediaInfo.title} season ${season}` : mediaInfo.title;
+        //const searchQuery = mediaType === 'tv' && season ? `${mediaInfo.title} season ${season}` : mediaInfo.title;
+        const searchQuery = mediaInfo.imdbId ? mediaInfo.imdbId : mediaInfo.title;
         console.log(`[Moviesdrive] Searching for: "${searchQuery}"`);
 
         return search(searchQuery).then(function (searchResults) {
@@ -1326,7 +1324,7 @@ function getStreams(tmdbId, mediaType = 'movie', season = null, episode = null) 
             const selectedMedia = bestMatch || searchResults[0];
 
             console.log(`[Moviesdrive] Selected: "${selectedMedia.title}" (${selectedMedia.url})`);
-
+            
             // Get download links
             return getDownloadLinks(selectedMedia.url, season, episode).then(function (result) {
                 const { finalLinks, isMovie } = result;

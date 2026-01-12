@@ -1,4 +1,4 @@
-const { getStreams } = require('./src/providers/xdmovies.js');
+const { getStreams } = require('./src/providers/moviesdrive.js');
 
 getStreams('1218925', 'movie').then(streams => {
   console.log('Found', streams.length, 'streams');
